@@ -1,6 +1,6 @@
 <h1>ManiSkill Baselines</span></h1>
 
-This repository contains **unofficial** baselines for [ManiSkill](https://maniskill2.github.io/) (more specifically, version `0.5.3`). These baselines are heavily tuned so they generally give you better sample efficiency and performance. 
+This repository contains **unofficial** baselines for [ManiSkill](https://maniskill2.github.io/) (more specifically, version `0.5.3`). These baselines are **heavily tuned** so they generally give you better sample efficiency and performance. 
 
 
 ----
@@ -50,20 +50,20 @@ Please check [ManiSkill's documentation](https://github.com/haosulab/ManiSkill?t
 ## Benchmark Overview
 
 |       **Task**      | **SAC(state)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
-|:-------------------:|:--------------:|:----------------------------:|-----------------------------|
-| PickCube            | ✅              | ✅                            | ✅                           |
-| StackCube           | ✅              | ✅                            | ✅                           |
+|:-------------------:|:--------------:|:----------------------------:|:---------------------------:|
+| PickCube            | ✅              | ✅                            |              ✅              |
+| StackCube           | ✅              | ✅                            |              ✅              |
 | PickSingleYCB       | ✅              |                              |                             |
 | PickSingleEGAD      | ✅              |                              |                             |
 | PickClutterYCB      | ✅              |                              |                             |
-| PegInsertionSide    | ✅              | ✅                            | ❌                           |
-| TurnFaucet          | ✅              | ⚠️                            | ⚠️                           |
+| PegInsertionSide    | ✅              | ✅                            |              ❌              |
+| TurnFaucet          | ✅              | ⚠️                            |              ⚠️              |
 | PlugCharger         | ⚠️              |                              |                             |
 | PandaAvoidObstacles | ❌              |                              |                             |
 | OpenCabinetDrawer   | ✅              |                              |                             |
 | OpenCabinetDoor     | ✅              |                              |                             |
 | MoveBucket          | ✅              |                              |                             |
-| PushChair           | ⚠️              | ⚠️                            | ⚠️                           |
+| PushChair           | ⚠️              | ⚠️                            |              ⚠️              |
 
 - ✅ = works well
 - ⚠️ = doesn't work well
