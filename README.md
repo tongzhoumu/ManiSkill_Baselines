@@ -32,11 +32,10 @@ export MS2_ASSET_DIR=<path>/<to>/<data>
 
 and restart your terminal. 
 
-Please check [ManiSkill's documentation](https://github.com/haosulab/ManiSkill?tab=readme-ov-file#installation) for more details.
 
 ----
 
-# TODOs
+## TODOs
 - [x] SAC state
 - [ ] PPO state
 - [ ] SAC rgbd (a few examples)
@@ -44,29 +43,30 @@ Please check [ManiSkill's documentation](https://github.com/haosulab/ManiSkill?t
 - [x] diffusion policy state (a few examples)
 - [x] diffusion policy rgbd (a few examples)
 - [ ] BeT state (a few examples)
+- [ ] MPC
 
 ----
 
 ## Benchmark Overview
 
-|       **Task**      | **SAC(state)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
-|:-------------------:|:--------------:|:----------------------------:|:---------------------------:|
-| PickCube            | ✅              | ✅                            |              ✅              |
-| StackCube           | ✅              | ✅                            |              ✅              |
-| PickSingleYCB       | ✅              |                              |                             |
-| PickSingleEGAD      | ✅              |                              |                             |
-| PickClutterYCB      | ✅              |                              |                             |
-| PegInsertionSide    | ✅              | ✅                            |              ❌              |
-| TurnFaucet          | ✅              | ⚠️                            |              ⚠️              |
-| PlugCharger         | ⚠️              |                              |                             |
-| PandaAvoidObstacles | ❌              |                              |                             |
-| OpenCabinetDrawer   | ✅              |                              |                             |
-| OpenCabinetDoor     | ✅              |                              |                             |
-| MoveBucket          | ✅              |                              |                             |
-| PushChair           | ⚠️              | ⚠️                            |              ⚠️              |
+|       **Task**      | **SAC (state)** | **PPO (state)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
+|:-------------------:|:---------------:|:---------------:|:----------------------------:|:---------------------------:|
+| PickCube            |        ✅        |        ✅        |               ✅              |              ✅              |
+| StackCube           |        ✅        |        ❌        |               ✅              |              ✅              |
+| PickSingleYCB       |        ✅        |        ✅        |                              |                             |
+| PickSingleEGAD      |        ✅        |        ✅        |                              |                             |
+| PickClutterYCB      |        ✅        |        ⚠️        |                              |                             |
+| PegInsertionSide    |        ✅        |                 |               ✅              |              ❌              |
+| TurnFaucet          |        ✅        |                 |               ⚠️              |              ⚠️              |
+| PlugCharger         |        ⚠️        |                 |                              |                             |
+| PandaAvoidObstacles |        ❌        |                 |                              |                             |
+| OpenCabinetDrawer   |        ✅        |        ⚠️        |                              |                             |
+| OpenCabinetDoor     |        ✅        |        ⚠️        |                              |                             |
+| MoveBucket          |        ✅        |        ❌        |                              |                             |
+| PushChair           |        ⚠️        |                 |               ⚠️              |              ⚠️              |
 
 - ✅ = works well
-- ⚠️ = doesn't work well
+- ⚠️ = works, but there is still room for improvement
 - ❌ = doesn't work at all
 - blank = not tested yet
 
@@ -80,23 +80,38 @@ The following commands should be run under the repo root dir.
 ### SAC
 
 ```bash
-python rl/sac_state.py --env-id PickCube-v1 --total-timesteps 500000
-python rl/sac_state.py --env-id StackCube-v1 --total-timesteps 5000000
-python rl/sac_state.py --env-id PickSingleYCB-v1 --total-timesteps 5000000
-python rl/sac_state.py --env-id PickSingleEGAD-v1 --total-timesteps 2000000
-python rl/sac_state.py --env-id PickClutterYCB-v1 --total-timesteps 15000000
-python rl/sac_state.py --env-id PegInsertionSide-v1 --total-timesteps 10000000 --gamma 0.9 --control-mode pd_ee_delta_pose
-python rl/sac_state.py --env-id TurnFaucet-v0 --total-timesteps 20000000 --gamma 0.95 --control-mode pd_ee_delta_pose
-python rl/sac_state.py --env-id PlugCharger-v0 --total-timesteps 15000000 --control-mode pd_ee_delta_pose
-python rl/sac_state.py --env-id OpenCabinetDrawer_unified-v1 --total-timesteps 3000000 --gamma 0.95 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel
-python rl/sac_state.py --env-id OpenCabinetDoor_unified-v1 --total-timesteps 5000000 --gamma 0.95 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel
-python rl/sac_state.py --env-id MoveBucket_unified-v1 --total-timesteps 80000000 --gamma 0.9 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500000 --log-freq 20000
-python rl/sac_state.py --env-id PushChair_unified-v1 --total-timesteps 20000000 --gamma 0.9 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500000 --log-freq 20000
+python rl/sac_state.py --env-id PickCube-v1 --total-timesteps 500_000
+python rl/sac_state.py --env-id StackCube-v1 --total-timesteps 5_000_000
+python rl/sac_state.py --env-id PickSingleYCB-v1 --total-timesteps 5_000_000
+python rl/sac_state.py --env-id PickSingleEGAD-v1 --total-timesteps 2_000_000
+python rl/sac_state.py --env-id PickClutterYCB-v1 --total-timesteps 15_000_000
+python rl/sac_state.py --env-id PegInsertionSide-v1 --total-timesteps 10_000_000 --gamma 0.9 --control-mode pd_ee_delta_pose
+python rl/sac_state.py --env-id TurnFaucet-v0 --total-timesteps 20_000_000 --gamma 0.95 --control-mode pd_ee_delta_pose
+python rl/sac_state.py --env-id PlugCharger-v0 --total-timesteps 15_000_000 --control-mode pd_ee_delta_pose
+python rl/sac_state.py --env-id OpenCabinetDrawer_unified-v1 --total-timesteps 3_000_000 --gamma 0.95 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel
+python rl/sac_state.py --env-id OpenCabinetDoor_unified-v1 --total-timesteps 5_000_000 --gamma 0.95 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel
+python rl/sac_state.py --env-id MoveBucket_unified-v1 --total-timesteps 80_000_000 --gamma 0.9 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
+python rl/sac_state.py --env-id PushChair_unified-v1 --total-timesteps 20_000_000 --gamma 0.9 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
 ```
 
 Notes:
 - If you want to use [Weights and Biases](https://wandb.ai) (`wandb`) to track learning progress, please add `--track` to your commands.
 - You can tune `--num-envs` to get better speed.
+
+### PPO
+
+```bash
+python rl/ppo_state.py --env-id PickCube-v1 --total-timesteps 3_000_000
+python rl/ppo_state.py --env-id PickSingleYCB-v1 --total-timesteps 50_000_000 --gamma 0.9 --utd 0.025
+python rl/ppo_state.py --env-id PickSingleEGAD-v1 --total-timesteps 5_000_000 --utd 0.025
+python rl/ppo_state.py --env-id PickClutterYCB-v1 --total-timesteps 50_000_000
+python rl/ppo_state.py --env-id OpenCabinetDrawer_unified-v1 --total-timesteps 30_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
+python rl/ppo_state.py --env-id OpenCabinetDoor_unified-v1 --total-timesteps 50_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
+```
+
+Notes:
+- PPO usually yields worse sample effiency when comapred to SAC.
+
 
 ### Diffusion Policy
 
