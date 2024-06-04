@@ -37,7 +37,7 @@ and restart your terminal.
 
 ## TODOs
 - [x] SAC state
-- [ ] PPO state
+- [x] PPO state
 - [ ] SAC rgbd (a few examples)
 - [ ] PPO rgbd (a few examples)
 - [x] diffusion policy state (a few examples)
@@ -50,7 +50,7 @@ and restart your terminal.
 ## Benchmark Overview
 
 |       **Task**      | **SAC (state)** | **PPO (state)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
-|:-------------------:|:---------------:|:---------------:|:----------------------------:|:---------------------------:|
+|---------------------|:---------------:|:---------------:|:----------------------------:|:---------------------------:|
 | PickCube            |        ✅        |        ✅        |               ✅              |              ✅              |
 | StackCube           |        ✅        |        ❌        |               ✅              |              ✅              |
 | PickSingleYCB       |        ✅        |        ✅        |                              |                             |
