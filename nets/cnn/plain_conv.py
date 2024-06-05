@@ -20,6 +20,7 @@ class PlainConv(nn.Module):
         super().__init__()
         # assume input image size is 64x64
 
+        self.out_dim = out_dim
         self.cnn = nn.Sequential(
             nn.Conv2d(in_channels, 16, 3, padding=1, bias=True), nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),  # [32, 32]
