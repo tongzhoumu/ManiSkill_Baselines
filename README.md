@@ -42,7 +42,6 @@ and restart your terminal.
 - [ ] PPO rgbd (a few examples)
 - [x] diffusion policy state (a few examples)
 - [x] diffusion policy rgbd (a few examples)
-- [ ] BeT state (a few examples)
 - [ ] MPC
 
 ----
@@ -58,12 +57,12 @@ and restart your terminal.
 | PickClutterYCB      |        ✅        |                |        ⚠️        |                              |                             |
 | PegInsertionSide    |        ✅        |                |        ❌        |               ✅              |              ❌              |
 | TurnFaucet          |        ✅        |                |        ✅        |               ⚠️              |              ⚠️              |
-| PlugCharger         |        ⚠️        |                |                 |                              |                             |
-| PandaAvoidObstacles |        ❌        |                |                 |                              |                             |
+| PlugCharger         |        ⚠️        |                |        ❌        |                              |                             |
+| PandaAvoidObstacles |        ❌        |                |        ❌        |                              |                             |
 | OpenCabinetDrawer   |        ✅        |                |        ⚠️        |                              |                             |
 | OpenCabinetDoor     |        ✅        |                |        ⚠️        |                              |                             |
 | MoveBucket          |        ✅        |                |        ❌        |                              |                             |
-| PushChair           |        ⚠️        |                |                 |               ⚠️              |              ⚠️              |
+| PushChair           |        ⚠️        |                |        ⚠️        |               ⚠️              |              ⚠️              |
 
 - ✅ = works well
 - ⚠️ = works, but there is still room for improvement
@@ -112,9 +111,10 @@ python rl/ppo_state.py --env-id PickCube-v1 --total-timesteps 3_000_000
 python rl/ppo_state.py --env-id PickSingleYCB-v1 --total-timesteps 50_000_000 --gamma 0.9 --utd 0.025
 python rl/ppo_state.py --env-id PickSingleEGAD-v1 --total-timesteps 5_000_000 --utd 0.025
 python rl/ppo_state.py --env-id PickClutterYCB-v1 --total-timesteps 50_000_000
-python rl/sac_state.py --env-id TurnFaucet-v0 --total-timesteps 10_000_000 --gamma 0.99 --utd 0.025 --control-mode pd_ee_delta_pose
+python rl/sac_state.py --env-id TurnFaucet-v0 --total-timesteps 20_000_000 --gamma 0.99 --utd 0.025 --control-mode pd_ee_delta_pose
 python rl/ppo_state.py --env-id OpenCabinetDrawer_unified-v1 --total-timesteps 30_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
 python rl/ppo_state.py --env-id OpenCabinetDoor_unified-v1 --total-timesteps 50_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
+python rl/ppo_state.py --env-id PushChair_unified-v1 --total-timesteps 20_000_000 --gamma 0.8 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
 ```
 
 Notes:
