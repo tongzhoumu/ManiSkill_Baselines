@@ -1,4 +1,4 @@
-ALGO_NAME = 'PPO'
+ALGO_NAME = 'PPO-RGBD'
 
 import os
 import argparse
@@ -17,7 +17,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 import datetime
 from collections import defaultdict
+from functools import partial
 from utils.profiling import NonOverlappingTimeProfiler
+from nets.cnn.plain_conv import PlainConv, make_mlp
+
 
 def parse_args():
     # fmt: off
@@ -72,6 +75,7 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=0.1,
         help="the target KL divergence threshold")
+    parser.add_argument("--critic-warmup-epochs", type=int, default=4)
     parser.add_argument("--finite-horizon-gae", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True)
 
     parser.add_argument("--output-dir", type=str, default='output')
@@ -86,6 +90,8 @@ def parse_args():
     parser.add_argument("--bootstrap-at-done", type=str, choices=['always', 'never', 'truncated'], default='always',
         help="in ManiSkill variable episode length and dense reward setting, set to always if positive reawrd, truncated if negative reward.")
     parser.add_argument("--control-mode", type=str, default='pd_ee_delta_pos')
+    parser.add_argument("--image-size", type=int, default=64,
+        help="the size of observation image, e.g. 64 means 64x64")
 
     args = parser.parse_args()
     args.algo_name = ALGO_NAME
@@ -100,65 +106,107 @@ def parse_args():
     args.update_epochs = int(args.num_updates_per_collect // args.num_minibatches)
     args.num_eval_envs = min(args.num_eval_envs, args.num_eval_episodes)
     assert args.num_eval_episodes % args.num_eval_envs == 0
+    args.critic_warmup_updates = args.critic_warmup_epochs * args.num_minibatches
     # fmt: on
     return args
 
 import mani_skill2.envs
 import env_wrappers.better_rewards # use the rewards designed by Tongzhou Mu
 import env_wrappers.better_obs # use the observations designed by Tongzhou Mu
+from mani_skill2.utils.common import flatten_state_dict, flatten_dict_space_keys
 from mani_skill2.utils.wrappers import RecordEpisode
+from gymnasium.core import ObservationWrapper
+from gymnasium import spaces
 
-def make_env(env_id, seed, control_mode=None, video_dir=None):
-    def thunk():
-        env = gym.make(env_id, reward_mode='dense', obs_mode='state', 
-                       control_mode=control_mode,
-                       render_mode='cameras' if video_dir else None)
-        if video_dir:
-            env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, info_on_video=True)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        env = gym.wrappers.ClipAction(env)
+class MS2_RGBDObsWrapper(ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        assert self.obs_mode == 'rgbd'
+        self.observation_space = self.build_obs_space(env, depth_dtype=np.float32)
 
-        env.action_space.seed(seed)
-        env.observation_space.seed(seed)
-        return env
+    def observation(self, obs):
+        img_dict = obs['image']
+        new_img_dict = {
+            key: np.concatenate([v[key] for v in img_dict.values()], axis=-1)
+            for key in ['rgb', 'depth']
+        }
 
-    return thunk
+        states = [flatten_state_dict(obs["agent"])]
+        if len(obs["extra"]) > 0:
+            states.append(flatten_state_dict(obs["extra"]))
+        new_img_dict['state'] = np.hstack(states)
 
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
+        return new_img_dict
+
+    @staticmethod
+    def build_obs_space(env, depth_dtype=np.float16):
+        obs_space = getattr(env, 'single_observation_space', env.observation_space)
+        state_dim = 0
+        for k in ['agent', 'extra']:
+            state_dim += sum([v.shape[0] for v in flatten_dict_space_keys(obs_space[k]).spaces.values()])
+
+        single_img_space = list(obs_space['image'].values())[0]
+        h, w, _ = single_img_space['rgb'].shape
+        k = len(obs_space['image']) # number of cameras
+
+        return spaces.Dict({
+            'state': spaces.Box(-float("inf"), float("inf"), shape=(state_dim,), dtype=np.float32),
+            'rgb': spaces.Box(0, 255, shape=(h,w,k*3), dtype=np.uint8),
+            'depth': spaces.Box(-float("inf"), float("inf"), shape=(h,w,k), dtype=depth_dtype),
+        })
+    # NOTE: We have to use float32 for gym AsyncVecEnv since it does not support float16, but we can use float16 for MS2 vec env
+
+def make_vec_env(env_id, num_envs, seed, control_mode=None, image_size=None, video_dir=None):
+    cam_cfg = {'width': image_size, 'height': image_size} if image_size else None
+    wrappers = [
+        gym.wrappers.RecordEpisodeStatistics,
+        gym.wrappers.ClipAction,
+    ]
+    if video_dir:
+        wrappers.append(partial(RecordEpisode, output_dir=video_dir, save_trajectory=False, info_on_video=True))
+    wrappers.append(MS2_RGBDObsWrapper)
+    def make_single_env(_seed):
+        def thunk():
+            env = gym.make(env_id, reward_mode='dense', obs_mode='rgbd', control_mode=control_mode, camera_cfgs=cam_cfg)
+            for wrapper in wrappers: env = wrapper(env)
+            env.action_space.seed(_seed)
+            env.observation_space.seed(_seed)
+            return env
+        return thunk
+    # must use AsyncVectorEnv, so that the renderers will be in different processes
+    envs = gym.vector.AsyncVectorEnv([make_single_env(seed + i) for i in range(num_envs)], context='forkserver')
+
+    return envs
 
 class Agent(nn.Module):
     def __init__(self, envs):
         super().__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.unwrapped.single_observation_space.shape).prod(), 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, 1)),
-        )
-        self.actor_mean = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.unwrapped.single_observation_space.shape).prod(), 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, 256)),
-            nn.Tanh(),
-            layer_init(nn.Linear(256, np.prod(envs.unwrapped.single_action_space.shape)), std=0.01*np.sqrt(2)),
-        )
-        self.actor_logstd = nn.Parameter(torch.ones(1, np.prod(envs.unwrapped.single_action_space.shape)) * -0.5)
+        action_dim = np.prod(envs.single_action_space.shape)
+        state_dim = envs.single_observation_space['state'].shape[0]
+        self.encoder = PlainConv(in_channels=8, out_dim=256)
+        self.critic = make_mlp(256+state_dim, [512, 256, 1], last_act=False)
+        self.actor_mean = make_mlp(256+state_dim, [512, 256, action_dim], last_act=False)
+        self.actor_logstd = nn.Parameter(torch.ones(1, action_dim) * -0.5)
 
-    def get_value(self, x):
+    def get_feature(self, obs):
+        # Preprocess the obs before passing to the real network, similar to the Dataset class in supervised learning
+        rgb = obs['rgb'].float() / 255.0 # (B, H, W, 3*k)
+        depth = obs['depth'].float() # (B, H, W, 1*k)
+        img = torch.cat([rgb, depth], dim=3) # (B, H, W, C)
+        img = img.permute(0, 3, 1, 2) # (B, C, H, W)
+        feature = self.encoder(img)
+        return torch.cat([feature, obs['state']], dim=1)
+
+    def get_value(self, obs):
+        x = self.get_feature(obs)
         return self.critic(x)
 
-    def get_eval_action(self, x):
+    def get_eval_action(self, obs):
+        x = self.get_feature(obs)
         return self.actor_mean(x)
 
-    def get_action_and_value(self, x, action=None):
+    def get_action_and_value(self, obs, action=None):
+        x = self.get_feature(obs)
         action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
@@ -166,6 +214,65 @@ class Agent(nn.Module):
         if action is None:
             action = probs.sample()
         return action, probs.log_prob(action).sum(1), probs.entropy().sum(1), self.critic(x)
+
+
+def to_tensor(x):
+    if isinstance(x, dict):
+        return {k: to_tensor(v) for k, v in x.items()}
+    elif isinstance(x, torch.Tensor):
+        return x.to(device)
+    return torch.tensor(x, dtype=torch.float32, device=device)
+
+def unsqueeze(x, dim):
+    if isinstance(x, dict):
+        return {k: unsqueeze(v, dim) for k, v in x.items()}
+    return x.unsqueeze(dim)
+
+class DictArray(object):
+    def __init__(self, buffer_shape, element_space, data_dict=None):
+        self.buffer_shape = buffer_shape
+        if data_dict:
+            self.data = data_dict
+        else:
+            assert isinstance(element_space, spaces.dict.Dict)
+            self.data = {}
+            for k, v in element_space.items():
+                if isinstance(v, spaces.dict.Dict):
+                    self.data[k] = DictArray(buffer_shape, v)
+                else:
+                    self.data[k] = torch.zeros(buffer_shape + v.shape).to(device)
+
+    def keys(self):
+        return self.data.keys()
+    
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            return self.data[index]
+        return {
+            k: v[index] for k, v in self.data.items()
+        }
+
+    def __setitem__(self, index, value):
+        if isinstance(index, str):
+            self.data[index] = value
+        for k, v in value.items():
+            self.data[k][index] = v
+    
+    @property
+    def shape(self):
+        return self.buffer_shape
+
+    def reshape(self, shape):
+        t = len(self.buffer_shape)
+        new_dict = {}
+        for k,v in self.data.items():
+            if isinstance(v, DictArray):
+                new_dict[k] = v.reshape(shape)
+            else:
+                new_dict[k] = v.reshape(shape + v.shape[t:])
+        new_buffer_shape = next(iter(new_dict.values())).shape[:len(shape)]
+        return DictArray(new_buffer_shape, None, data_dict=new_dict)
+
 
 def collect_episode_info(infos, result=None):
     if result is None:
@@ -188,7 +295,7 @@ def evaluate(n, agent, eval_envs, device):
     obs, info = eval_envs.reset() # don't seed here
     while len(result['return']) < n:
         with torch.no_grad():
-            action = agent.get_eval_action(torch.Tensor(obs).to(device))
+            action = agent.get_eval_action(to_tensor(obs))
         obs, rew, terminated, truncated, info = eval_envs.step(action.cpu().numpy())
         collect_episode_info(info, result)
     print('======= Evaluation Ends =========')
@@ -235,27 +342,18 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
-    tmp_env = make_env(args.env_id, seed=0)()
+    tmp_env = gym.make(args.env_id)
     if tmp_env.spec.max_episode_steps > args.num_steps:
         print("\033[93mWARN: num_steps is less than max episode length. "
             "Consider raise num_steps_per_collect or lower num_envs. Continue?\033[0m")
         aaa = input()
     del tmp_env
-    VecEnv = gym.vector.SyncVectorEnv if args.sync_venv else gym.vector.AsyncVectorEnv
-    kwargs = {} if args.sync_venv else {'context': 'forkserver'}
-    envs = VecEnv(
-        [make_env(args.env_id, args.seed + i, args.control_mode) for i in range(args.num_envs)],
-        **kwargs
-    )
+    eval_envs = make_vec_env(args.env_id, args.num_eval_envs, args.seed+1000, args.control_mode, args.image_size,
+                             video_dir=f'{log_path}/videos' if args.capture_video else None)
+    eval_envs.reset(seed=args.seed+1000) # seed eval_envs here, and no more seeding during evaluation
+    envs = make_vec_env(args.env_id, args.num_envs, args.seed, args.control_mode, args.image_size)
     if args.rew_norm:
         envs = gym.wrappers.NormalizeReward(envs, args.gamma)
-    eval_envs = VecEnv(
-        [make_env(args.env_id, args.seed + 1000 + i, args.control_mode,
-                f'{log_path}/videos' if args.capture_video and i == 0 else None) 
-        for i in range(args.num_eval_envs)],
-        **kwargs,
-    )
-    eval_envs.reset(seed=args.seed+1000) # seed eval_envs here, and no more seeding during evaluation
     assert isinstance(envs.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
     # agent setup
@@ -263,7 +361,8 @@ if __name__ == "__main__":
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    # each obs is like {'image': {'rgb': (B,H,W,6), 'depth': (B,H,W,2)}, 'state': (B,D)}
+    obs = DictArray((args.num_steps, args.num_envs), envs.single_observation_space)
     actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -273,7 +372,7 @@ if __name__ == "__main__":
     # TRY NOT TO MODIFY: start the game
     global_step = 0
     next_obs, _ = envs.reset(seed=args.seed)
-    next_obs = torch.Tensor(next_obs).to(device)
+    next_obs = to_tensor(next_obs)
     next_done = torch.zeros(args.num_envs).to(device)
     num_updates = int(np.ceil(args.total_timesteps / args.num_steps_per_collect))
     result = defaultdict(list)
@@ -322,12 +421,13 @@ if __name__ == "__main__":
                     need_final_obs = truncations & (~terminations) # only need final obs when truncated and not terminated
                 for idx, _need_final_obs in enumerate(need_final_obs):
                     if _need_final_obs:
-                        final_obs = torch.tensor(infos["final_observation"][idx], dtype=torch.float, device=device)
+                        final_obs = unsqueeze(to_tensor(infos["final_observation"][idx]), dim=0)
                         with torch.no_grad():
                             final_value = agent.get_value(final_obs)
                         final_values[step, idx] = final_value.item()
 
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(done).to(device)
+            next_obs= to_tensor(next_obs)
+            next_done = torch.Tensor(done).to(device)
 
             result = collect_episode_info(infos, result)
         
@@ -377,7 +477,7 @@ if __name__ == "__main__":
             returns = advantages + values
 
         # flatten the batch
-        b_obs = obs.reshape((-1,) + envs.single_observation_space.shape)
+        b_obs = obs.reshape((-1,))
         b_logprobs = logprobs.reshape(-1)
         b_actions = actions.reshape((-1,) + envs.single_action_space.shape)
         b_advantages = advantages.reshape(-1)
@@ -432,7 +532,11 @@ if __name__ == "__main__":
                     v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
 
                 entropy_loss = entropy.mean()
-                loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
+                if args.critic_warmup_updates > 0:
+                    loss = v_loss * args.vf_coef
+                    args.critic_warmup_updates -= 1
+                else:
+                    loss = pg_loss - args.ent_coef * entropy_loss + v_loss * args.vf_coef
 
                 optimizer.zero_grad()
                 loss.backward()

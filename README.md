@@ -48,21 +48,21 @@ and restart your terminal.
 
 ## Benchmark Overview
 
-|       **Task**      | **SAC (state)** | **SAC (RGBD)** | **PPO (state)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
-|---------------------|:---------------:|:--------------:|:---------------:|:----------------------------:|:---------------------------:|
-| PickCube            |        ✅        |        ✅       |        ✅        |               ✅              |              ✅              |
-| StackCube           |        ✅        |                |        ❌        |               ✅              |              ✅              |
-| PickSingleYCB       |        ✅        |                |        ✅        |                              |                             |
-| PickSingleEGAD      |        ✅        |                |        ✅        |                              |                             |
-| PickClutterYCB      |        ✅        |                |        ⚠️        |                              |                             |
-| PegInsertionSide    |        ✅        |                |        ❌        |               ✅              |              ❌              |
-| TurnFaucet          |        ✅        |                |        ✅        |               ⚠️              |              ⚠️              |
-| PlugCharger         |        ⚠️        |                |        ❌        |                              |                             |
-| PandaAvoidObstacles |        ❌        |                |        ❌        |                              |                             |
-| OpenCabinetDrawer   |        ✅        |                |        ⚠️        |                              |                             |
-| OpenCabinetDoor     |        ✅        |                |        ⚠️        |                              |                             |
-| MoveBucket          |        ✅        |                |        ❌        |                              |                             |
-| PushChair           |        ⚠️        |                |        ⚠️        |               ⚠️              |              ⚠️              |
+|       **Task**      | **SAC (state)** | **SAC (RGBD)** | **PPO (state)** | **PPO (RGBD)** | **Diffusion Policy (state)** | **Diffusion Policy (RGBD)** |
+|---------------------|:---------------:|:--------------:|:---------------:|:--------------:|:----------------------------:|:---------------------------:|
+| PickCube            |        ✅        |        ✅       |        ✅        | ✅              |               ✅              |              ✅              |
+| StackCube           |        ✅        |                |        ❌        |                |               ✅              |              ✅              |
+| PickSingleYCB       |        ✅        |                |        ✅        |                |                              |                             |
+| PickSingleEGAD      |        ✅        |                |        ✅        |                |                              |                             |
+| PickClutterYCB      |        ✅        |                |        ⚠️        |                |                              |                             |
+| PegInsertionSide    |        ✅        |                |        ❌        |                |               ✅              |              ❌              |
+| TurnFaucet          |        ✅        |                |        ✅        |                |               ⚠️              |              ⚠️              |
+| PlugCharger         |        ⚠️        |                |        ❌        |                |                              |                             |
+| PandaAvoidObstacles |        ❌        |                |        ❌        |                |                              |                             |
+| OpenCabinetDrawer   |        ✅        |                |        ⚠️        |                |                              |                             |
+| OpenCabinetDoor     |        ✅        |                |        ⚠️        |                |                              |                             |
+| MoveBucket          |        ✅        |                |        ❌        |                |                              |                             |
+| PushChair           |        ⚠️        |                |        ⚠️        |                |               ⚠️              |              ⚠️              |
 
 - ✅ = works well
 - ⚠️ = works, but there is still room for improvement
@@ -115,6 +115,11 @@ python rl/sac_state.py --env-id TurnFaucet-v0 --total-timesteps 20_000_000 --gam
 python rl/ppo_state.py --env-id OpenCabinetDrawer_unified-v1 --total-timesteps 30_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
 python rl/ppo_state.py --env-id OpenCabinetDoor_unified-v1 --total-timesteps 50_000_000 --gamma 0.95 --utd 0.025 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
 python rl/ppo_state.py --env-id PushChair_unified-v1 --total-timesteps 20_000_000 --gamma 0.8 --bootstrap-at-done truncated --control-mode base_pd_joint_vel_arm_pd_joint_vel --eval-freq 500_000 --log-freq 20_000
+```
+
+RGBD observation:
+```bash
+python rl/ppo_rgbd.py --env-id PickCube-v1 --total-timesteps 5_000_000
 ```
 
 Notes:
